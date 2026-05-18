@@ -60,6 +60,38 @@ def _write_log(message: str) -> None:
     logger.info("Meddelande sparat i %s", log_path)
 
 
+def resend_from_log() -> None:
+    """Läs senaste meddelandet från mail_log.html och skicka till Mattermost igen."""
+    log_path = Path(__file__).parent / "mail_log.html"
+    if not log_path.exists():
+        logger.error("Ingen mail_log.html hittades – inget att skicka.")
+        return
+
+    content = log_path.read_text(encoding="utf-8")
+
+    # Extrahera Markdown-texten mellan <pre ...> och </pre>
+    start = content.find(">", content.find("<pre")) + 1
+    end = content.rfind("</pre>")
+    if start <= 0 or end <= 0:
+        logger.error("Kunde inte tolka mail_log.html – oväntat format.")
+        return
+
+    message = content[start:end]
+    logger.info("Skickar om senaste loggade meddelandet till Mattermost…")
+
+    try:
+        response = httpx.post(
+            config.MATTERMOST_WEBHOOK_URL,
+            content=json.dumps({"text": message}),
+            headers={"Content-Type": "application/json"},
+            timeout=15,
+        )
+        response.raise_for_status()
+        logger.info("Meddelande skickat om.")
+    except Exception:
+        logger.exception("Misslyckades att skicka till Mattermost")
+
+
 def send_digest(results: list[AnalysisResult]) -> None:
     """Skicka digest till Mattermost via incoming webhook."""
     if not results:

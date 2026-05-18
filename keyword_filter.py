@@ -7,7 +7,7 @@ import re
 # Matchning är skiftlägesokänslig och ordgränsbaserad.
 KEYWORD_GROUPS: list[list[str]] = [
     # Basinkomst & ekonomisk rättvisa
-    ["basinkomst", "medborgarlön", "universell grundinkomst","omställning","vidareutbildning","omskolning","AI-jobb","AI-ersättning"],
+    ["basinkomst", "medborgarlön", "universell grundinkomst","omställning","vidareutbildning","omskolning","AI-jobb","AI-ersättning","miljardärer","kapitalism","ekonomisk rättvisa","AI-omställning","förmögenhetsskatt","arbetstidsförkortning","garantipension"],
     # Avkriminalisering & narkotikapolitik
     ["avkriminalisering", "narkotikapolitik", "cannabis", "drogpolitik", "legalisering", "harm reduction", "sprutbyte", "naloxon","gängskjutning","gängvåld"],
     # Integritet & övervakning

@@ -54,6 +54,7 @@ RSS_FEEDS: list[dict] = [
     {"name": "Göteborgs-Posten", "url": "https://www.gp.se/rss/"},
     {"name": "Sydsvenskan", "url": "https://www.sydsvenskan.se/feeds/feed.xml"},
     {"name": "Dagens Industri", "url": "https://www.di.se/rss"},
+    {"name": "Sveriges Radio Ekot", "url": "http://api.sr.se/api/rss/program/83"},
 ]
 
 # Söktermer för Nitter/Twitter

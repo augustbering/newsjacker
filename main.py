@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import sys
 import time
+import argparse
 
 import schedule
 
@@ -11,7 +12,7 @@ import config
 import storage
 from analyzer import analyze_batch
 from keyword_filter import filter_items
-from notifier import send_digest
+from notifier import send_digest, resend_from_log
 from scrapers import nitter_scraper, rss_scraper
 
 logging.basicConfig(
@@ -104,7 +105,20 @@ def run_cycle() -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="NewsJacker – nyhetsbevakningsagent")
+    parser.add_argument(
+        "--resend",
+        action="store_true",
+        help="Skicka om senaste resultaten från mail_log.html utan att söka nya nyheter.",
+    )
+    args = parser.parse_args()
+
     storage.init_db()
+
+    if args.resend:
+        resend_from_log()
+        return
+
     logger.info(
         "NewsJacker startar – kör var %d:e timme (tröskel: %d/10)",
         config.SCHEDULE_HOURS,
