@@ -12,6 +12,7 @@ import config
 import storage
 from analyzer import analyze_batch
 from keyword_filter import filter_items
+from dedup import deduplicate_items
 from notifier import send_digest, resend_from_log
 from scrapers import nitter_scraper, rss_scraper
 
@@ -65,7 +66,11 @@ def run_cycle() -> None:
             "source": t["source"],
         })
 
-    # 4. Nyckelordsfilter – grovgallring för att spara API-kvot
+    # 4. Filtrera bort titelduplikat (samma nyhet från flera källor)
+    items, dup_items = deduplicate_items(items)
+    storage.mark_seen_batch([i["url"] for i in dup_items])
+
+    # 5. Nyckelordsfilter – grovgallring för att spara API-kvot
     useFilter = config.KEYWORD_FILTER_ENABLED
     if useFilter:
         candidates, dropped = filter_items(items)
@@ -84,13 +89,13 @@ def run_cycle() -> None:
         logger.info("Inga kandidater efter nyckelordsfilter.")
         return
 
-    # 5. Analysera med Gemini
+    # 6. Analysera med Gemini
     all_results = analyze_batch(candidates)
 
-    # 6. Markera kandidater som sedda
+    # 7. Markera kandidater som sedda
     storage.mark_seen_batch([i["url"] for i in candidates])
 
-    # 7. Filtrera på relevanströskel
+    # 8. Filtrera på relevanströskel
     relevant = [r for r in all_results if r["score"] >= config.RELEVANCE_THRESHOLD]
     logger.info(
         "%d av %d items når tröskel %d/10",
@@ -99,7 +104,7 @@ def run_cycle() -> None:
         config.RELEVANCE_THRESHOLD,
     )
 
-    # 8. Skicka digest
+    # 9. Skicka digest
     send_digest(relevant)
     logger.info("=== Cykel klar ===")
 
