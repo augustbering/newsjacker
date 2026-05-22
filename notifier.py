@@ -1,6 +1,7 @@
 """Notifieringar via Mattermost incoming webhook."""
 from __future__ import annotations
 
+import re
 import logging
 import json
 from datetime import datetime
@@ -10,6 +11,7 @@ import httpx
 
 import config
 from analyzer import AnalysisResult
+from storage import save_published_post
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,11 @@ def _score_emoji(score: int) -> str:
     if score >= 7:
         return "🟠"
     return "🟡"
+
+
+def _strip_markdown_headings(text: str) -> str:
+    """Ta bort markdown-rubriksyntax (#, ##, ###) så texten renderas som brödtext."""
+    return re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
 
 
 def _build_message(results: list[AnalysisResult]) -> str:
@@ -41,7 +48,7 @@ def _build_message(results: list[AnalysisResult]) -> str:
             r["newsjack_tweet"],
             f"```",
             f"**📝 Kommentar:**",
-            r["newsjack_comment"],
+            _strip_markdown_headings(r["newsjack_comment"]),
             "---",
         ]
     return "\n".join(lines)
@@ -109,6 +116,8 @@ def send_digest(results: list[AnalysisResult]) -> None:
             timeout=15,
         )
         response.raise_for_status()
+        for r in results:
+            save_published_post(r)
         logger.info("Mattermost-notis skickad (%d nyheter)", len(results))
     except Exception:
         logger.exception("Misslyckades att skicka till Mattermost")

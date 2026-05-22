@@ -14,6 +14,7 @@ from analyzer import analyze_batch
 from keyword_filter import filter_items
 from dedup import deduplicate_items
 from notifier import send_digest, resend_from_log
+from storage import get_recent_published_posts
 from scrapers import nitter_scraper, rss_scraper
 
 logging.basicConfig(
@@ -33,7 +34,7 @@ def run_cycle() -> None:
 
     # 1. Hämta nyheter
     articles = rss_scraper.fetch_all(config.RSS_FEEDS)
-    tweets = nitter_scraper.fetch_all(config.NITTER_SEARCH_TERMS)
+    tweets = []#nitter_scraper.fetch_all(config.NITTER_SEARCH_TERMS)
     logger.info("Hämtade %d artiklar och %d tweets", len(articles), len(tweets))
 
     # 2. Filtrera bort redan sedda
@@ -89,8 +90,11 @@ def run_cycle() -> None:
         logger.info("Inga kandidater efter nyckelordsfilter.")
         return
 
-    # 6. Analysera med Gemini
-    all_results = analyze_batch(candidates)
+    # 6. Analysera med Gemini (med historik för variation)
+    history = get_recent_published_posts()
+    if history:
+        logger.info("Skickar %d publicerade inlägg som historikkontext till Gemini", len(history))
+    all_results = analyze_batch(candidates, history=history)
 
     # 7. Markera kandidater som sedda
     storage.mark_seen_batch([i["url"] for i in candidates])
