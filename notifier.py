@@ -29,46 +29,59 @@ def _strip_markdown_headings(text: str) -> str:
     return re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
 
 
-def _build_message(results: list[AnalysisResult]) -> str:
-    """Bygg Mattermost-meddelande i Markdown."""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+def _build_item_message(r: AnalysisResult) -> str:
+    """Bygg ett Mattermost-meddelande för ett enskilt nyhetsitem."""
+    emoji = _score_emoji(r["score"])
     lines = [
-        f"## 🏴‍☠️ NewsJacker – {len(results)} newsjacking-möjligheter [{timestamp}]",
-        "---",
+        f"### {emoji} {r['score']}/10 – [{r['title']}]({r['url']})",
+        f"*Källa: {r['source']}*",
+        f"> {r['motivation']}",
+        "",
+        "**🐦 Tweet-förslag:**",
+        "```",
+        r["newsjack_tweet"],
+        "```",
+        "**📝 Kommentar:**",
+        _strip_markdown_headings(r["newsjack_comment"]),
     ]
-    for r in sorted(results, key=lambda x: x["score"], reverse=True):
-        emoji = _score_emoji(r["score"])
-        lines += [
-            f"### {emoji} {r['score']}/10 – [{r['title']}]({r['url']})",
-            f"*Källa: {r['source']}*",
-            f"> {r['motivation']}",
-            "",
-            f"**🐦 Tweet-förslag:**",
-            f"```",
-            r["newsjack_tweet"],
-            f"```",
-            f"**📝 Kommentar:**",
-            _strip_markdown_headings(r["newsjack_comment"]),
-            "---",
-        ]
     return "\n".join(lines)
 
 
+def _post_to_mattermost(message: str) -> None:
+    response = httpx.post(
+        config.MATTERMOST_WEBHOOK_URL,
+        content=json.dumps({"text": message}),
+        headers={"Content-Type": "application/json"},
+        timeout=15,
+    )
+    response.raise_for_status()
+
+
 def _write_log(message: str) -> None:
-    """Skriv meddelandet till mail_log.html för felsökning."""
+    """Append ett meddelande till mail_log.html för felsökning."""
     log_path = Path(__file__).parent / "mail_log.html"
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(log_path, "w", encoding="utf-8") as f:
-        f.write(
-            f"<!-- Mattermost-meddelande loggat {timestamp} -->\n"
-            f"<pre style='font-family:monospace;white-space:pre-wrap;padding:20px'>"
-            f"{message}</pre>"
-        )
-    logger.info("Meddelande sparat i %s", log_path)
+    separator = "=" * 80
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(f"\n<!-- {timestamp} -->\n<pre style='font-family:monospace;white-space:pre-wrap;padding:20px'>{message}\n{separator}</pre>\n")
+
+
+def send_result(r: AnalysisResult) -> bool:
+    """Skicka ett enskilt analysresultat till Mattermost. Returnerar True vid lyckat anrop."""
+    message = _build_item_message(r)
+    _write_log(message)
+    try:
+        _post_to_mattermost(message)
+        save_published_post(r)
+        logger.info("Skickade: %s (%d/10)", r["title"][:60], r["score"])
+        return True
+    except Exception:
+        logger.exception("Misslyckades att skicka '%s'", r["title"][:60])
+        return False
 
 
 def resend_from_log() -> None:
-    """Läs senaste meddelandet från mail_log.html och skicka till Mattermost igen."""
+    """Läs senaste meddelanden från mail_log.html och skicka till Mattermost igen."""
     log_path = Path(__file__).parent / "mail_log.html"
     if not log_path.exists():
         logger.error("Ingen mail_log.html hittades – inget att skicka.")
@@ -83,41 +96,26 @@ def resend_from_log() -> None:
         logger.error("Kunde inte tolka mail_log.html – oväntat format.")
         return
 
-    message = content[start:end]
-    logger.info("Skickar om senaste loggade meddelandet till Mattermost…")
+    combined = content[start:end]
+    separator = "=" * 80
+    messages = [m.strip() for m in combined.split(separator) if m.strip()]
 
-    try:
-        response = httpx.post(
-            config.MATTERMOST_WEBHOOK_URL,
-            content=json.dumps({"text": message}),
-            headers={"Content-Type": "application/json"},
-            timeout=15,
-        )
-        response.raise_for_status()
-        logger.info("Meddelande skickat om.")
-    except Exception:
-        logger.exception("Misslyckades att skicka till Mattermost")
+    logger.info("Skickar om %d meddelanden från loggen till Mattermost…", len(messages))
+    sent = 0
+    for message in messages:
+        try:
+            _post_to_mattermost(message)
+            sent += 1
+        except Exception:
+            logger.exception("Misslyckades att skicka meddelande")
+    logger.info("%d/%d meddelanden skickade om.", sent, len(messages))
 
 
 def send_digest(results: list[AnalysisResult]) -> None:
-    """Skicka digest till Mattermost via incoming webhook."""
+    """Skicka ett Mattermost-inlägg per nyhet."""
     if not results:
         logger.info("Inga relevanta nyheter att skicka.")
         return
 
-    message = _build_message(results)
-    _write_log(message)
-
-    try:
-        response = httpx.post(
-            config.MATTERMOST_WEBHOOK_URL,
-            content=json.dumps({"text": message}),
-            headers={"Content-Type": "application/json"},
-            timeout=15,
-        )
-        response.raise_for_status()
-        for r in results:
-            save_published_post(r)
-        logger.info("Mattermost-notis skickad (%d nyheter)", len(results))
-    except Exception:
-        logger.exception("Misslyckades att skicka till Mattermost")
+    sent = sum(1 for r in sorted(results, key=lambda x: x["score"], reverse=True) if send_result(r))
+    logger.info("%d/%d nyheter skickade till Mattermost", sent, len(results))

@@ -10,10 +10,10 @@ import schedule
 
 import config
 import storage
-from analyzer import analyze_batch
+from analyzer import analyze_item
 from keyword_filter import filter_items
 from dedup import deduplicate_items
-from notifier import send_digest, resend_from_log
+from notifier import send_result, resend_from_log
 from storage import get_recent_published_posts
 from scrapers import nitter_scraper, rss_scraper
 
@@ -90,27 +90,29 @@ def run_cycle() -> None:
         logger.info("Inga kandidater efter nyckelordsfilter.")
         return
 
-    # 6. Analysera med Gemini (med historik för variation)
+    # 6. Analysera med Gemini och skicka direkt vid träff
     history = get_recent_published_posts()
     if history:
         logger.info("Skickar %d publicerade inlägg som historikkontext till Gemini", len(history))
-    all_results = analyze_batch(candidates, history=history)
 
-    # 7. Markera kandidater som sedda
-    storage.mark_seen_batch([i["url"] for i in candidates])
+    sent = 0
+    for item in candidates:
+        result = analyze_item(
+            title=item.get("title", "") or item.get("text", ""),
+            summary=item.get("summary", "") or item.get("text", ""),
+            url=item["url"],
+            source=item["source"],
+            history=history,
+        )
+        storage.mark_seen(item["url"])
+        if result is None:
+            continue
+        logger.info("Score %d/10: %s", result["score"], result["title"][:60])
+        if result["score"] >= config.RELEVANCE_THRESHOLD:
+            if send_result(result):
+                sent += 1
 
-    # 8. Filtrera på relevanströskel
-    relevant = [r for r in all_results if r["score"] >= config.RELEVANCE_THRESHOLD]
-    logger.info(
-        "%d av %d items når tröskel %d/10",
-        len(relevant),
-        len(all_results),
-        config.RELEVANCE_THRESHOLD,
-    )
-
-    # 9. Skicka digest
-    send_digest(relevant)
-    logger.info("=== Cykel klar ===")
+    logger.info("=== Cykel klar – %d nyheter skickade ===", sent)
 
 
 def main() -> None:
