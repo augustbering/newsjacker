@@ -68,7 +68,7 @@ def _call_with_retry(prompt: str) -> str:
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.7,
-                    max_output_tokens=1500,
+                    max_output_tokens=3000,
                     thinking_config=types.ThinkingConfig(thinking_level="low"),
                 ),
             )
@@ -156,7 +156,14 @@ Analysera denna nyhet ur Piratpartiets perspektiv."""
 
     try:
         raw = _call_with_retry(f"{SYSTEM_PROMPT}\n\n{user_prompt}")
-        data = json.loads(raw)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.error(
+                "Ogiltigt JSON-svar för '%s' (trunkerat? %d tecken): %s…",
+                title, len(raw), raw[:200],
+            )
+            return None
 
         return AnalysisResult(
             url=url,
