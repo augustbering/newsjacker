@@ -7,6 +7,7 @@ load_dotenv()
 # Gemini
 GEMINI_API_KEY: str = os.environ["GEMINI_API_KEY"]
 GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "models/gemini-3-flash-preview")
+DEEP_RESEARCH_AGENT: str = os.getenv("DEEP_RESEARCH_AGENT", "deep-research-pro-preview-12-2025")
 
 # SMTP / e-post (ej längre primär notifieringskanal, behålls som fallback)
 SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")

@@ -80,6 +80,16 @@ def send_result(r: AnalysisResult) -> bool:
         return False
 
 
+def send_article(message: str) -> None:
+    """Skicka en djupanalys-artikel till Mattermost."""
+    _write_log(message)
+    try:
+        _post_to_mattermost(message)
+        logger.info("Djupanalys skickad till Mattermost (%d tecken)", len(message))
+    except Exception:
+        logger.exception("Misslyckades att skicka djupanalys")
+
+
 def resend_from_log() -> None:
     """Läs senaste meddelanden från mail_log.html och skicka till Mattermost igen."""
     log_path = Path(__file__).parent / "mail_log.html"

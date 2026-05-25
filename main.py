@@ -15,6 +15,7 @@ from keyword_filter import filter_items
 from dedup import deduplicate_items
 from notifier import send_result, resend_from_log
 from storage import get_recent_published_posts
+from deep_researcher import run_daily_research_and_post
 from scrapers import nitter_scraper, rss_scraper
 
 logging.basicConfig(
@@ -122,12 +123,21 @@ def main() -> None:
         action="store_true",
         help="Skicka om senaste resultaten från mail_log.html utan att söka nya nyheter.",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--deep-research",
+        action="store_true",
+        help="Kör deep research direkt och posta till Mattermost.",
+    )
 
+    args = parser.parse_args()
     storage.init_db()
 
     if args.resend:
         resend_from_log()
+        return
+
+    if args.deep_research:
+        run_daily_research_and_post()
         return
 
     logger.info(
@@ -142,6 +152,10 @@ def main() -> None:
     # Schemalägg regelbundna körningar
     schedule.every(config.SCHEDULE_HOURS).hours.do(run_cycle)
     logger.info("Nästa körning om %d timmar.", config.SCHEDULE_HOURS)
+
+    # Daglig deep research – kör kl 08:00
+    schedule.every().day.at("08:00").do(run_daily_research_and_post)
+    logger.info("Daglig deep research schemalagd kl 08:00.")
 
     while True:
         schedule.run_pending()
